@@ -4,101 +4,340 @@
 <meta charset="UTF-8">
 <title>津波情報オーバーレイ</title>
 
-<!--
-    【免責事項 / Disclaimer】
-    ・本プロジェクトは参考資料として提供されるものであり、動作の正確性や品質を保証するものではありません。
-    ・本プログラムの使用によって生じた損害や事故等について、制作者および提供者は一切の責任を負いません。
-    ・本プロジェクトは、P2P地震情報が提供する公開API（https://www.p2pquake.net/develop/json_api_v2/）を利用しています。
-      貴重なデータを提供されているP2P地震情報様に深く感謝申し上げます。
-    ・本コードは OpenAI-ChatGPT5.5 と Telezzz (https://x.com/@Telezzz_X) の共同作業により作成されました。
--->
-
-<link rel="preload" href="https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20M.otf" as="font" type="font/otf" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20DB.otf" as="font" type="font/otf" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20R.otf" as="font" type="font/otf" crossorigin="anonymous">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=block" rel="stylesheet">
 
 <style>
-/* 全体レイアウト設定 */
 *{ margin:0; padding:0; box-sizing:border-box; }
-html,body{ width:3840px; height:2160px; overflow:hidden; background:transparent; }
+html,body{
+    width:3840px;
+    height:2160px;
+    overflow:hidden;
+    background:transparent;
+    font-family:"Noto Sans JP", sans-serif;
+}
 
-@font-face { font-family:"UDShinGoM"; src:url("https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20M.otf") format("opentype"); font-display:block; }
-@font-face { font-family:"UDShinGoDB"; src:url("https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20DB.otf") format("opentype"); font-display:block; }
-@font-face { font-family:"UDShinGoR"; src:url("https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20R.otf") format("opentype"); font-display:block; }
+:root{
+    --font-main:"Noto Sans JP", sans-serif;
+    --weight-r:400;
+    --weight-m:500;
+    --weight-db:700;
+    --weight-bold:700;
+    --h:calc(2160px / 7);
+}
 
-#main{ width:3840px; height:2160px; display:flex; align-items:flex-end; opacity:0; visibility:hidden; }
-#main.ready{ opacity:1; visibility:visible; }
-#block{ width:3840px; display:flex; flex-direction:column; background:rgba(0, 0, 0, 0.6); overflow:hidden; position:relative; }
+#main{
+    width:3840px;
+    height:2160px;
+    display:flex;
+    align-items:flex-end;
+    opacity:0;
+    visibility:hidden;
+}
+#main.ready{
+    opacity:1;
+    visibility:visible;
+}
+
+#block{
+    width:3840px;
+    display:flex;
+    flex-direction:column;
+    background:rgba(0, 0, 0, 0.6);
+    overflow:hidden;
+    position:relative;
+}
+
 #page-content{ width:100%; }
-.page{ width:100%; display:flex; flex-direction:column; justify-content:flex-end; }
 
-/* 待機画面（津波情報なし） */
+.page{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-end;
+}
+
 #no-tsunami-screen{
-    position:fixed; left:0; top:0; width:3840px; height:2160px;
-    background:rgba(0, 0, 0, 0.7); display:none; align-items:center; justify-content:center; z-index:9999;
+    position:fixed;
+    left:0;
+    top:0;
+    width:3840px;
+    height:2160px;
+    background:rgba(0, 0, 0, 0.7);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:9999;
 }
 #no-tsunami-screen.show{ display:flex; }
-/* 文字サイズ 315px (180pxから75%拡大) */
-#no-tsunami-text{ font-family:"UDShinGoDB"; font-size:315px; line-height:1.25; color:#fff; text-align:center; white-space:nowrap; }
 
-:root{ --h:calc(2160px / 7); }
-
-/* グリッドレイアウト：地点(x2290まで)・到達時間(700px)・高度(800px) */
-.header, .row{
-    display:grid; grid-template-columns:2290px 700px 50px 800px;
-    height:var(--h); font-family:"UDShinGoM"; font-size:210px; line-height:1; align-items:center; color:#fff; position:relative;
+#no-tsunami-text{
+    font-family:var(--font-main);
+    font-weight:var(--weight-db);
+    font-size:315px;
+    line-height:1.25;
+    color:#fff;
+    text-align:center;
+    white-space:nowrap;
 }
 
-/* ヘッダーフォント設定：Mフォント強制 */
-.header{ font-family:"UDShinGoM" !important; font-weight:400 !important; }
-.header *{ font-family:"UDShinGoM" !important; font-weight:400 !important; }
+.header, .row{
+    display:grid;
+    grid-template-columns:2290px 700px 50px 800px;
+    height:var(--h);
+    font-family:var(--font-main);
+    font-weight:var(--weight-m);
+    font-size:210px;
+    line-height:1;
+    align-items:center;
+    color:#fff;
+    position:relative;
+}
+
+.header{
+    font-family:var(--font-main) !important;
+    font-weight:var(--weight-m) !important;
+}
+.header *{
+    font-family:var(--font-main) !important;
+    font-weight:var(--weight-m) !important;
+}
+
 .header.major{ background:#a202a7; }
 .header.warn{ background:#ff2801; }
-.header.watch{ background:#faf601; color:#000; font-family:"UDShinGoM" !important; }
+.header.watch{
+    background:#faf601;
+    color:#000;
+    font-family:var(--font-main) !important;
+    font-weight:var(--weight-m) !important;
+}
 
-.row.divider::after{ content:""; position:absolute; bottom:-5px; left:0; width:100%; height:10px; background:#fff; opacity:0.9; z-index:10; box-shadow:0 3px 6px rgba(0, 0, 0, 0.5); }
+.row.divider::after{
+    content:"";
+    position:absolute;
+    bottom:-5px;
+    left:0;
+    width:100%;
+    height:10px;
+    background:#fff;
+    opacity:0.9;
+    z-index:10;
+    box-shadow:0 3px 6px rgba(0, 0, 0, 0.5);
+}
 
-/* 区切り線用マーカー (10x250) */
-.header-marker, .row-marker{ position:absolute; top:50%; width:10px; height:250px; transform:translateY(-50%); z-index:30; pointer-events:none; }
+.header-marker, .row-marker{
+    position:absolute;
+    top:50%;
+    width:10px;
+    height:250px;
+    transform:translateY(-50%);
+    z-index:30;
+    pointer-events:none;
+}
 .header-marker{ background:#fff; }
 .header.watch .header-marker{ background:#000; }
 .row-marker{ background:#fff; }
 .marker-x2242{ left:2242px; }
 .marker-x3035{ left:3035px; }
 
-.name{ grid-column:1; padding-left:60px; display:flex; align-items:center; width:2290px; height:100%; overflow:hidden; }
-.name-text{ display:inline-block; white-space:nowrap; transform-origin:left center; }
+.name{
+    grid-column:1;
+    padding-left:60px;
+    display:flex;
+    align-items:center;
+    width:2290px;
+    height:100%;
+    overflow:hidden;
+}
+.name-text{
+    display:inline-block;
+    white-space:nowrap;
+    transform-origin:left center;
+}
 
-/* ヘッダー特殊フィールド：絶対座標指定 */
-.header-field{ position:absolute; top:0; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; pointer-events:none; }
-.header-field.first-wave{ left:2280px; width:715px; }
-.header-field.max-height{ left:3090px; width:680px; }
+.header-field{
+    position:absolute;
+    top:0;
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    pointer-events:none;
+}
+.header-field.first-wave{
+    left:2280px;
+    width:715px;
+}
+.header-field.max-height{
+    left:3090px;
+    width:680px;
+}
 
-.header-sub-title{ width:100%; height:160px; display:flex; align-items:center; justify-content:center; white-space:nowrap; overflow:hidden; font-family:"UDShinGoM" !important; font-size:160px; line-height:1; }
-.header-sub-inner{ height:160px; display:flex; align-items:center; justify-content:center; white-space:nowrap; overflow:hidden; font-family:"UDShinGoM" !important; font-size:160px; line-height:1; }
-.sub-symbol-box{ display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; height:160px; overflow:visible; margin-right:10px; line-height:1; }
-.sub-symbol{ display:inline-block; flex-shrink:0; transform:scaleX(0.70); transform-origin:center center; line-height:1; font-family:"UDShinGoM" !important; }
-.sub-text-wrap{ display:inline-block; flex-shrink:0; overflow:hidden; white-space:nowrap; height:160px; line-height:1; }
-.sub-text{ display:inline-block; white-space:nowrap; transform-origin:left center; line-height:1; font-family:"UDShinGoM" !important; }
+.header-sub-title{
+    width:100%;
+    height:160px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    white-space:nowrap;
+    overflow:hidden;
+    font-family:var(--font-main) !important;
+    font-weight:var(--weight-m) !important;
+    font-size:160px;
+    line-height:1;
+}
+.header-sub-inner{
+    height:160px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    white-space:nowrap;
+    overflow:hidden;
+    font-family:var(--font-main) !important;
+    font-weight:var(--weight-m) !important;
+    font-size:160px;
+    line-height:1;
+}
+.sub-symbol-box{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+    height:160px;
+    overflow:visible;
+    margin-right:10px;
+    line-height:1;
+}
+.sub-symbol{
+    display:inline-block;
+    flex-shrink:0;
+    transform:scaleX(0.70);
+    transform-origin:center center;
+    line-height:1;
+    font-family:var(--font-main) !important;
+    font-weight:var(--weight-m) !important;
+}
+.sub-text-wrap{
+    display:inline-block;
+    flex-shrink:0;
+    overflow:hidden;
+    white-space:nowrap;
+    height:160px;
+    line-height:1;
+}
+.sub-text{
+    display:inline-block;
+    white-space:nowrap;
+    transform-origin:left center;
+    line-height:1;
+    font-family:var(--font-main) !important;
+    font-weight:var(--weight-m) !important;
+}
 
-/* 到達時間・状況エリア：Rフォント使用 */
-.row .arrival{ grid-column:2; width:700px; height:100%; display:flex; align-items:center; overflow:hidden; color:#f9f806; font-family:"UDShinGoR","UDShinGoM"; }
-.row .arrival *{ font-family:"UDShinGoR","UDShinGoM"; }
-.arrival-text{ width:100%; height:200px; display:flex; align-items:center; white-space:nowrap; font-family:"UDShinGoR","UDShinGoM"; font-size:150px; line-height:1; }
-.arrival-text.condition-layout{ justify-content:center; height:200px; font-size:200px; }
-.condition-val{ display:inline-block; height:200px; line-height:1; font-size:200px; white-space:nowrap; transform-origin:center center; }
-.arrival-text.time-layout{ justify-content:space-between; padding:0; }
-.time-left-box{ display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:4px; transform-origin:left center; }
-.time-date-line{ font-size:85px; line-height:1; white-space:nowrap; }
-.time-ampm-line{ font-size:75px; line-height:1; white-space:nowrap; }
-.time-right-val{ display:inline-block; font-size:190px; line-height:1; white-space:nowrap; transform-origin:right center; }
+.row .arrival{
+    grid-column:2;
+    width:700px;
+    height:100%;
+    display:flex;
+    align-items:center;
+    overflow:hidden;
+    color:#f9f806;
+    font-family:var(--font-main);
+    font-weight:var(--weight-r);
+}
+.row .arrival *{
+    font-family:var(--font-main);
+    font-weight:var(--weight-r);
+}
+.arrival-text{
+    width:100%;
+    height:200px;
+    display:flex;
+    align-items:center;
+    white-space:nowrap;
+    font-family:var(--font-main);
+    font-weight:var(--weight-r);
+    font-size:150px;
+    line-height:1;
+}
+.arrival-text.condition-layout{
+    justify-content:center;
+    height:200px;
+    font-size:200px;
+}
+.condition-val{
+    display:inline-block;
+    height:200px;
+    line-height:1;
+    font-size:200px;
+    white-space:nowrap;
+    transform-origin:center center;
+}
+.arrival-text.time-layout{
+    justify-content:space-between;
+    padding:0;
+}
+.time-left-box{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    justify-content:center;
+    gap:4px;
+    transform-origin:left center;
+}
+.time-date-line{
+    font-size:85px;
+    line-height:1;
+    white-space:nowrap;
+}
+.time-ampm-line{
+    font-size:75px;
+    line-height:1;
+    white-space:nowrap;
+}
+.time-right-val{
+    display:inline-block;
+    font-size:190px;
+    line-height:1;
+    white-space:nowrap;
+    transform-origin:right center;
+}
 
-.spacer{ grid-column:3; width:50px; height:100%; }
+.spacer{
+    grid-column:3;
+    width:50px;
+    height:100%;
+}
 
-/* 高度表示エリア：Mフォント使用 */
-.height{ grid-column:4; width:800px; height:100%; background:#fff; color:#000; display:flex; align-items:center; justify-content:center; font-weight:bold; }
-.header .height{ background:transparent; color:inherit; }
-.height-text{ height:200px; display:flex; align-items:center; justify-content:center; font-size:190px; line-height:1; white-space:nowrap; font-family:"UDShinGoM"; }
+.height{
+    grid-column:4;
+    width:800px;
+    height:100%;
+    background:#fff;
+    color:#000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:var(--font-main);
+    font-weight:var(--weight-bold);
+}
+.header .height{
+    background:transparent;
+    color:inherit;
+}
+.height-text{
+    height:200px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:190px;
+    line-height:1;
+    white-space:nowrap;
+    font-family:var(--font-main);
+    font-weight:var(--weight-bold);
+}
 .row.major .height-text{ color:#a202a7; }
 .row.warn .height-text{ color:#ff2801; }
 .row.watch .height-text{ color:#000; }
@@ -111,6 +350,7 @@ html,body{ width:3840px; height:2160px; overflow:hidden; background:transparent;
         <div id="page-content"></div>
     </div>
 </div>
+
 <div id="no-tsunami-screen">
     <div id="no-tsunami-text">
         現在、津波警報·注意報は<br>
@@ -119,11 +359,16 @@ html,body{ width:3840px; height:2160px; overflow:hidden; background:transparent;
 </div>
 
 <script>
-// P2P地震情報 WebSocket API URL
 const WS_URL = "wss://api.p2pquake.net/v2/ws";
 const PAGE_SIZE = 7;
 const PAGE_DURATION = 5000;
 const rowHeight = 2160 / 7;
+
+/*
+    true  = 测试模式，立刻显示内置测试数据
+    false = 正常 WebSocket 实时模式
+*/
+const TEST_MODE = false;
 
 let pageTimer = null;
 let pageOffsets = [];
@@ -131,6 +376,7 @@ let cachedPages = [];
 let currentPageIndex = 0;
 let tsunamiSocket = null;
 let reconnectTimer = null;
+let lastRenderedData = null;
 
 function toHalfWidth(str) {
     if (!str) return str;
@@ -141,7 +387,12 @@ function toHalfWidth(str) {
 
 function escapeHtml(str) {
     if (!str) return "";
-    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 function mapGrade(g) {
@@ -154,7 +405,11 @@ function mapGrade(g) {
 function mapConditionText(condition) {
     if (!condition) return "";
     const text = toHalfWidth(condition);
-    const map = { "ただちに津波来襲と予測":"すぐ来る", "津波到達中と推測":"到達か", "第1波の到達を確認":"すでに到達" };
+    const map = {
+        "ただちに津波来襲と予測":"すぐ来る",
+        "津波到達中と推測":"到達か",
+        "第1波の到達を確認":"すでに到達"
+    };
     return map[text] || text;
 }
 
@@ -163,73 +418,149 @@ function parseArrivalTime(value) {
     const str = toHalfWidth(value);
     const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[T\s](\d{1,2}):(\d{2})/);
     if (!match) return null;
+
     const day = Number(match[3]);
     const hour24 = Number(match[4]);
     const ampm = hour24 < 12 ? "午前" : "午後";
     const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-    return { day:`${day}日`, ampm:ampm, time12:`${hour12}:${match[5]}` };
+
+    return {
+        day:`${day}日`,
+        ampm:ampm,
+        time12:`${hour12}:${match[5]}`
+    };
 }
 
 function getArrivalInfo(firstHeight) {
     if (!firstHeight) return { type:"empty", text:"-" };
-    if (firstHeight.condition) return { type:"condition", text:mapConditionText(firstHeight.condition) };
+
+    if (firstHeight.condition) {
+        return {
+            type:"condition",
+            text:mapConditionText(firstHeight.condition)
+        };
+    }
+
     if (firstHeight.arrivalTime) {
         const parsed = parseArrivalTime(firstHeight.arrivalTime);
-        return parsed ? { type:"arrivalTime", data:parsed } : { type:"condition", text:toHalfWidth(firstHeight.arrivalTime) };
+        return parsed
+            ? { type:"arrivalTime", data:parsed }
+            : { type:"condition", text:toHalfWidth(firstHeight.arrivalTime) };
     }
+
     return { type:"empty", text:"-" };
 }
 
 function buildArrivalHtml(arrival) {
-    if (!arrival || arrival.type === "empty") return `<div class="arrival-text condition-layout">-</div>`;
+    if (!arrival || arrival.type === "empty") {
+        return `<div class="arrival-text condition-layout">-</div>`;
+    }
+
     if (arrival.type === "arrivalTime" && arrival.data) {
         const d = arrival.data;
         return `<div class="arrival-text time-layout"><div class="time-left-box"><span class="time-date-line">${escapeHtml(d.day)}</span><span class="time-ampm-line">${escapeHtml(d.ampm)}</span></div><span class="time-right-val">${escapeHtml(d.time12)}</span></div>`;
     }
+
     return `<div class="arrival-text condition-layout"><span class="condition-val">${escapeHtml(arrival.text)}</span></div>`;
 }
 
 function flatten(data) {
     const list = [];
     const target = Array.isArray(data) ? data[0] : data;
+
     target.areas?.forEach(area => {
         const grade = mapGrade(area.grade);
-        if (grade) list.push({ label:grade.label, cls:grade.cls, grade:area.grade, name:area.name, arrival:getArrivalInfo(area.firstHeight), height:toHalfWidth(area.maxHeight?.description || "-") });
+
+        if (grade) {
+            list.push({
+                label:grade.label,
+                cls:grade.cls,
+                grade:area.grade,
+                name:area.name,
+                arrival:getArrivalInfo(area.firstHeight),
+                height:toHalfWidth(area.maxHeight?.description || "-")
+            });
+        }
     });
+
     return list;
 }
 
 function groupByGrade(list) {
-    const groups = []; let currentGrade = null, currentGroup = null;
+    const groups = [];
+    let currentGrade = null;
+    let currentGroup = null;
+
     for (const item of list) {
         if (item.grade !== currentGrade) {
             currentGrade = item.grade;
-            currentGroup = { grade:item.grade, label:item.label, cls:item.cls, areas:[] };
+            currentGroup = {
+                grade:item.grade,
+                label:item.label,
+                cls:item.cls,
+                areas:[]
+            };
             groups.push(currentGroup);
         }
+
         currentGroup.areas.push(item);
     }
+
     return groups;
 }
 
 function paginateGroups(groups) {
-    const pages = []; let currentPage = [], currentCount = 0;
+    const pages = [];
+    let currentPage = [];
+    let currentCount = 0;
+
     for (const group of groups) {
         let remainingAreas = [...group.areas];
+
         while (remainingAreas.length > 0) {
-            if (currentCount > 0 && (PAGE_SIZE - currentCount) < 2) { pages.push(currentPage); currentPage = []; currentCount = 0; continue; }
-            currentPage.push({ type:"header", cls:group.cls, name:group.label });
+            if (currentCount > 0 && (PAGE_SIZE - currentCount) < 2) {
+                pages.push(currentPage);
+                currentPage = [];
+                currentCount = 0;
+                continue;
+            }
+
+            currentPage.push({
+                type:"header",
+                cls:group.cls,
+                name:group.label
+            });
             currentCount += 1;
+
             const areasToPlace = remainingAreas.splice(0, PAGE_SIZE - currentCount);
+
             for (const area of areasToPlace) {
-                currentPage.push({ type:"row", cls:area.cls, name:area.name, arrival:area.arrival, height:area.height });
+                currentPage.push({
+                    type:"row",
+                    cls:area.cls,
+                    name:area.name,
+                    arrival:area.arrival,
+                    height:area.height
+                });
                 currentCount += 1;
             }
-            if (currentCount >= PAGE_SIZE) { pages.push(currentPage); currentPage = []; currentCount = 0; }
+
+            if (currentCount >= PAGE_SIZE) {
+                pages.push(currentPage);
+                currentPage = [];
+                currentCount = 0;
+            }
         }
     }
+
     if (currentPage.length > 0) pages.push(currentPage);
-    pages.forEach(page => { for (let i = 0; i < page.length; i++) page[i].divider = page[i].type === "row" && page[i + 1] && page[i + 1].type === "row"; });
+
+    pages.forEach(page => {
+        for (let i = 0; i < page.length; i++) {
+            page[i].divider = page[i].type === "row" && page[i + 1] && page[i + 1].type === "row";
+        }
+    });
+
     return pages;
 }
 
@@ -240,100 +571,323 @@ function buildHeaderSubTitle(text, limit) {
 function buildPageHtml(rows) {
     const pageHeight = rows.length * rowHeight;
     let html = `<div class="page" style="height:${pageHeight}px;">`;
+
     rows.forEach((row, i) => {
         const zIndexStyle = `style="z-index:${100 - i};"`;
+
         if (row.type === "header") {
             html += `<div class="header ${row.cls}" ${zIndexStyle}><div class="header-marker marker-x2242"></div><div class="header-marker marker-x3035"></div><div class="name"><span class="name-text">${escapeHtml(row.name)}</span></div><div class="header-field first-wave">${buildHeaderSubTitle("第1波予想", 715)}</div><div class="header-field max-height">${buildHeaderSubTitle("最大予想", 680)}</div></div>`;
         } else {
             html += `<div class="row ${row.cls || ""} ${row.divider ? "divider" : ""}" ${zIndexStyle}><div class="row-marker marker-x2242"></div><div class="name"><span class="name-text">${escapeHtml(row.name)}</span></div><div class="arrival">${buildArrivalHtml(row.arrival)}</div><div class="spacer"></div><div class="height"><span class="height-text">${escapeHtml(row.height)}</span></div></div>`;
         }
     });
+
     return html + "</div>";
 }
 
 function showPage(index) {
     const pageContent = document.getElementById("page-content");
+
     currentPageIndex = index;
     pageContent.style.transform = `translateY(${-pageOffsets[index] || 0}px)`;
+
     const block = document.getElementById("block");
-    if (cachedPages[index]) block.style.height = `${cachedPages[index].length * rowHeight}px`;
+
+    if (cachedPages[index]) {
+        block.style.height = `${cachedPages[index].length * rowHeight}px`;
+    }
 }
 
 function startPagination(pages) {
-    cachedPages = pages; pageOffsets = []; let offset = 0;
-    pages.forEach(page => { pageOffsets.push(offset); offset += page.length * rowHeight; });
+    cachedPages = pages;
+    pageOffsets = [];
+
+    let offset = 0;
+
+    pages.forEach(page => {
+        pageOffsets.push(offset);
+        offset += page.length * rowHeight;
+    });
+
     if (pageTimer) clearInterval(pageTimer);
+
     showPage(0);
-    if (pages.length > 1) pageTimer = setInterval(() => showPage((currentPageIndex + 1) % pages.length), PAGE_DURATION);
+
+    if (pages.length > 1) {
+        pageTimer = setInterval(() => {
+            showPage((currentPageIndex + 1) % pages.length);
+        }, PAGE_DURATION);
+    }
 }
 
 function scaleTextX(selector, maxWidth, origin = "center center") {
     document.querySelectorAll(selector).forEach(el => {
-        el.style.transformOrigin = origin; el.style.transform = "none";
+        el.style.transformOrigin = origin;
+        el.style.transform = "none";
+
         const w = el.offsetWidth;
-        if (w > maxWidth) el.style.transform = `scaleX(${maxWidth / w})`;
+
+        if (w > maxWidth) {
+            el.style.transform = `scaleX(${maxWidth / w})`;
+        }
     });
 }
 
 function scaleHeaderSubTitles() {
     document.querySelectorAll(".header-sub-title").forEach(box => {
         const maxWidth = Number(box.getAttribute("data-max"));
-        const inner = box.querySelector(".header-sub-inner"), symbol = box.querySelector(".sub-symbol"), wrap = box.querySelector(".sub-text-wrap"), text = box.querySelector(".sub-text");
+        const inner = box.querySelector(".header-sub-inner");
+        const symbol = box.querySelector(".sub-symbol");
+        const wrap = box.querySelector(".sub-text-wrap");
+        const text = box.querySelector(".sub-text");
+
         if (!inner || !symbol || !wrap || !text) return;
-        inner.style.width = "auto"; text.style.transform = "none"; wrap.style.width = "auto";
+
+        inner.style.width = "auto";
+        text.style.transform = "none";
+        wrap.style.width = "auto";
+
         const visualSymbolWidth = symbol.getBoundingClientRect().width;
         const marginRight = parseFloat(getComputedStyle(symbol.parentElement).marginRight) || 0;
+
         symbol.parentElement.style.width = `${visualSymbolWidth}px`;
+
         const avail = maxWidth - visualSymbolWidth - marginRight;
         const naturalTextWidth = text.offsetWidth;
-        if (naturalTextWidth > avail) { wrap.style.width = `${avail}px`; text.style.transform = `scaleX(${avail / naturalTextWidth})`; }
-        else { wrap.style.width = `${naturalTextWidth}px`; }
+
+        if (naturalTextWidth > avail) {
+            wrap.style.width = `${avail}px`;
+            text.style.transform = `scaleX(${avail / naturalTextWidth})`;
+        } else {
+            wrap.style.width = `${naturalTextWidth}px`;
+        }
+
         inner.style.width = `${visualSymbolWidth + marginRight + Math.min(naturalTextWidth, avail)}px`;
     });
 }
 
+function applyScaling() {
+    scaleTextX(".name-text", 2290 - 60, "left center");
+    scaleHeaderSubTitles();
+    scaleTextX(".condition-val", 700, "center center");
+    scaleTextX(".time-left-box", 200, "left center");
+    scaleTextX(".time-right-val", 480, "right center");
+    scaleTextX(".height-text", 760, "center center");
+}
+
 function showNoTsunamiScreen() {
-    const main = document.getElementById("main"), noTsunami = document.getElementById("no-tsunami-screen"), block = document.getElementById("block");
+    const main = document.getElementById("main");
+    const noTsunami = document.getElementById("no-tsunami-screen");
+    const block = document.getElementById("block");
+
     if (pageTimer) clearInterval(pageTimer);
+
     document.getElementById("page-content").innerHTML = "";
-    block.style.height = "0px"; main.classList.remove("ready"); noTsunami.classList.add("show");
+
+    block.style.height = "0px";
+    main.classList.remove("ready");
+    noTsunami.classList.add("show");
 }
 
 function renderFromTsunamiData(data) {
-    const main = document.getElementById("main"), pageContent = document.getElementById("page-content");
-    main.classList.remove("ready"); document.getElementById("no-tsunami-screen").classList.remove("show");
-    const list = flatten(data), groups = groupByGrade(list), pages = paginateGroups(groups);
-    if (pages.length === 0) { showNoTsunamiScreen(); return; }
-    let allHtml = ""; pages.forEach(page => allHtml += buildPageHtml(page));
+    lastRenderedData = data;
+
+    const main = document.getElementById("main");
+    const pageContent = document.getElementById("page-content");
+
+    main.classList.remove("ready");
+    document.getElementById("no-tsunami-screen").classList.remove("show");
+
+    const list = flatten(data);
+    const groups = groupByGrade(list);
+    const pages = paginateGroups(groups);
+
+    if (pages.length === 0) {
+        showNoTsunamiScreen();
+        return;
+    }
+
+    let allHtml = "";
+    pages.forEach(page => allHtml += buildPageHtml(page));
+
     pageContent.innerHTML = allHtml;
-    scaleTextX(".name-text", 2290 - 60, "left center"); scaleHeaderSubTitles(); scaleTextX(".condition-val", 700, "center center"); scaleTextX(".time-left-box", 200, "left center"); scaleTextX(".time-right-val", 480, "right center"); scaleTextX(".height-text", 760, "center center");
-    startPagination(pages); main.classList.add("ready");
+
+    requestAnimationFrame(() => {
+        applyScaling();
+        startPagination(pages);
+        main.classList.add("ready");
+    });
 }
 
 function startTsunamiWebSocket() {
-    if (tsunamiSocket) { try { tsunamiSocket.close(); } catch(e) {} tsunamiSocket = null; }
+    if (tsunamiSocket) {
+        try { tsunamiSocket.close(); } catch(e) {}
+        tsunamiSocket = null;
+    }
+
     if (reconnectTimer) clearTimeout(reconnectTimer);
+
     tsunamiSocket = new WebSocket(WS_URL);
+
     tsunamiSocket.addEventListener("open", () => console.log("WebSocket Connected"));
+
     tsunamiSocket.addEventListener("message", event => {
         try {
             const msg = JSON.parse(event.data);
+
             if (msg.code !== 552) return;
-            if (msg.cancelled === true || !msg.areas || msg.areas.length === 0) { showNoTsunamiScreen(); return; }
+
+            if (msg.cancelled === true || !msg.areas || msg.areas.length === 0) {
+                showNoTsunamiScreen();
+                return;
+            }
+
             renderFromTsunamiData(msg);
-        } catch(e) { console.error(e); }
+        } catch(e) {
+            console.error(e);
+        }
     });
+
     tsunamiSocket.addEventListener("close", () => {
         console.log("WebSocket Closed. Reconnecting...");
         reconnectTimer = setTimeout(startTsunamiWebSocket, 5000);
     });
-    tsunamiSocket.addEventListener("error", () => { try { tsunamiSocket.close(); } catch(e) {} });
+
+    tsunamiSocket.addEventListener("error", () => {
+        try { tsunamiSocket.close(); } catch(e) {}
+    });
 }
 
-// 初期化：待機画面を表示し、WebSocket接続を開始
-Promise.all([document.fonts.load("1em UDShinGoM"), document.fonts.load("1em UDShinGoDB"), document.fonts.load("1em UDShinGoR")])
-.then(() => { showNoTsunamiScreen(); startTsunamiWebSocket(); })
-.catch(() => { showNoTsunamiScreen(); startTsunamiWebSocket(); });
+const TEST_TSUNAMI_DATA = {
+    code:552,
+    cancelled:false,
+    areas:[
+        {
+            name:"北海道太平洋沿岸東部",
+            grade:"MajorWarning",
+            firstHeight:{
+                arrivalTime:"2026-07-07T08:50:00+09:00"
+            },
+            maxHeight:{
+                description:"10m超"
+            }
+        },
+        {
+            name:"北海道太平洋沿岸中部",
+            grade:"MajorWarning",
+            firstHeight:{
+                condition:"第1波の到達を確認"
+            },
+            maxHeight:{
+                description:"10m"
+            }
+        },
+        {
+            name:"青森県太平洋沿岸",
+            grade:"Warning",
+            firstHeight:{
+                condition:"津波到達中と推測"
+            },
+            maxHeight:{
+                description:"3m"
+            }
+        },
+        {
+            name:"岩手県",
+            grade:"Warning",
+            firstHeight:{
+                condition:"ただちに津波来襲と予測"
+            },
+            maxHeight:{
+                description:"3m"
+            }
+        },
+        {
+            name:"宮城県",
+            grade:"Warning",
+            firstHeight:{
+                arrivalTime:"2026-07-07T09:20:00+09:00"
+            },
+            maxHeight:{
+                description:"3m"
+            }
+        },
+        {
+            name:"福島県",
+            grade:"Watch",
+            firstHeight:{
+                arrivalTime:"2026-07-07T09:40:00+09:00"
+            },
+            maxHeight:{
+                description:"1m"
+            }
+        },
+        {
+            name:"茨城県",
+            grade:"Watch",
+            firstHeight:{
+                condition:"津波到達中と推測"
+            },
+            maxHeight:{
+                description:"1m"
+            }
+        },
+        {
+            name:"千葉県九十九里・外房",
+            grade:"Watch",
+            firstHeight:{
+                arrivalTime:"2026-07-07T10:10:00+09:00"
+            },
+            maxHeight:{
+                description:"1m"
+            }
+        },
+        {
+            name:"伊豆諸島",
+            grade:"Watch",
+            firstHeight:{
+                condition:"ただちに津波来襲と予測"
+            },
+            maxHeight:{
+                description:"1m"
+            }
+        },
+        {
+            name:"小笠原諸島",
+            grade:"Watch",
+            firstHeight:{
+                arrivalTime:"2026-07-07T10:30:00+09:00"
+            },
+            maxHeight:{
+                description:"1m"
+            }
+        }
+    ]
+};
+
+function init() {
+    if (TEST_MODE) {
+        renderFromTsunamiData(TEST_TSUNAMI_DATA);
+    } else {
+        showNoTsunamiScreen();
+        startTsunamiWebSocket();
+    }
+
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+            requestAnimationFrame(() => {
+                applyScaling();
+                showPage(currentPageIndex);
+            });
+        }).catch(() => {});
+    }
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+} else {
+    init();
+}
 </script>
 </body>
 </html>
