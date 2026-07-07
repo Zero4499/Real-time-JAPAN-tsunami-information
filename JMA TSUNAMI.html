@@ -360,6 +360,9 @@ html,body{
 
 <script>
 const WS_URL = "wss://api.p2pquake.net/v2/ws";
+// J-Alert JSONL ブリッジ URL（プラグインのTCP JSONLソケットをWebSocketへ中継したもの）。
+// ?jalert=ws://host:port で上書き可能。空文字にするとJ-Alert取り込みを無効化する。
+const JALERT_WS_URL = new URLSearchParams(location.search).get("jalert") ?? "ws://127.0.0.1:7356";
 const PAGE_SIZE = 7;
 const PAGE_DURATION = 5000;
 const rowHeight = 2160 / 7;
@@ -377,6 +380,12 @@ let currentPageIndex = 0;
 let tsunamiSocket = null;
 let reconnectTimer = null;
 let lastRenderedData = null;
+
+// 表示ソースの状態。areasを持つオブジェクト（P2Pのmsg／J-Alert正規化結果）、または解除時はnull。
+let latestP2P = null;
+let latestJAlert = null;
+// 直近の描画内容キー。変化がないときの無駄な再描画（ページ送りリセット）を防ぐ。
+let lastRenderKey = "__none__";
 
 function toHalfWidth(str) {
     if (!str) return str;
@@ -719,6 +728,24 @@ function renderFromTsunamiData(data) {
     });
 }
 
+// 表示ソースの決定：J-Alert電文（放送系の権威情報）に警報等がある間はP2Pより優先し、
+// 解除されたらP2Pの現況へ戻る。どちらにも警報等が無ければ待機画面。
+function activeSourceData() {
+    if (latestJAlert && flatten(latestJAlert).length > 0) return latestJAlert;
+    if (latestP2P && flatten(latestP2P).length > 0) return latestP2P;
+    return null;
+}
+
+// ソース状態が変わったときだけ再描画する（同一内容ならページ送りをリセットしない）。
+function updateDisplay() {
+    const data = activeSourceData();
+    const key = data ? JSON.stringify(flatten(data)) : "__none__";
+    if (key === lastRenderKey) return;
+    lastRenderKey = key;
+    if (!data) showNoTsunamiScreen();
+    else renderFromTsunamiData(data);
+}
+
 function startTsunamiWebSocket() {
     if (tsunamiSocket) {
         try { tsunamiSocket.close(); } catch(e) {}
@@ -737,12 +764,8 @@ function startTsunamiWebSocket() {
 
             if (msg.code !== 552) return;
 
-            if (msg.cancelled === true || !msg.areas || msg.areas.length === 0) {
-                showNoTsunamiScreen();
-                return;
-            }
-
-            renderFromTsunamiData(msg);
+            latestP2P = (msg.cancelled === true || !msg.areas || msg.areas.length === 0) ? null : msg;
+            updateDisplay();
         } catch(e) {
             console.error(e);
         }
@@ -756,6 +779,132 @@ function startTsunamiWebSocket() {
     tsunamiSocket.addEventListener("error", () => {
         try { tsunamiSocket.close(); } catch(e) {}
     });
+}
+
+/* =========================================================================
+   J-Alert 電文（JSONL / 気象庁津波XML）取り込み
+
+   sdrsharp-j-alert-plugin / sdrplusplus-j-alert-plugin が出力する JSONL を、
+   TCPソケット→WebSocket 中継ブリッジ（tools/jalert-ws-bridge.mjs）経由で受信し、
+   各行の xml フィールド（気象庁津波XML: VTSE41）を P2P と同じ内部形状
+   { areas:[{grade,name,firstHeight,maxHeight}] } に正規化して既存の描画へ流す。
+   ========================================================================= */
+
+let jalertSocket = null;
+let jalertReconnectTimer = null;
+let jalertBuffer = "";
+let jalertLatestPacketTime = ""; // 採用済み電文の最新 packet_time（17桁, 文字列比較で単調）
+
+// 気象庁のKind名 → 内部グレード。コードは 大津波警報=52/53・津波警報=51・
+// 津波注意報=62/63 と複数存在する（実受信機データで確認）ため、コードではなく
+// 名称で判定する。津波予報・津波なし等は表示対象外(null)。
+function mapJmaTsunamiGrade(name) {
+    const n = name || "";
+    if (n.includes("大津波警報")) return "MajorWarning";
+    if (n.includes("津波警報")) return "Warning";
+    if (n.includes("津波注意報")) return "Watch";
+    return null;
+}
+
+// 直下の子要素を局所名（名前空間プレフィックス無視）で取得する。
+function childByLocalName(parent, localName) {
+    if (!parent) return null;
+    for (const el of Array.from(parent.children)) if (el.localName === localName) return el;
+    return null;
+}
+function childTextByLocalName(parent, localName) {
+    const el = childByLocalName(parent, localName);
+    return el ? (el.textContent || "").trim() : "";
+}
+
+// 気象庁津波XML(1電文) → P2P互換の { areas } 。パース不能なら null。
+function parseJAlertTsunamiXml(xmlText) {
+    const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+    if (doc.getElementsByTagName("parsererror").length > 0) return null;
+
+    const areas = [];
+    // Body > Tsunami > Forecast > Item（名前空間非依存で走査）。
+    // Headline側の Item（Area/Category を直下に持たない）や Observation（Category無し）は除外。
+    for (const item of Array.from(doc.getElementsByTagNameNS("*", "Item"))) {
+        const areaEl = childByLocalName(item, "Area");
+        const categoryEl = childByLocalName(item, "Category");
+        if (!areaEl || !categoryEl) continue;
+
+        const kindEl = childByLocalName(categoryEl, "Kind");
+        const grade = mapJmaTsunamiGrade(childTextByLocalName(kindEl, "Name"));
+        if (!grade) continue; // 津波予報・なし等は表示しない
+
+        const firstHeightEl = childByLocalName(item, "FirstHeight");
+        const firstHeight = firstHeightEl ? {
+            condition: childTextByLocalName(firstHeightEl, "Condition") || undefined,
+            arrivalTime: childTextByLocalName(firstHeightEl, "ArrivalTime") || undefined
+        } : undefined;
+
+        const maxHeightEl = childByLocalName(item, "MaxHeight");
+        let heightDesc = "";
+        if (maxHeightEl) {
+            const th = childByLocalName(maxHeightEl, "TsunamiHeight");
+            heightDesc = (th && th.getAttribute("description")) || childTextByLocalName(maxHeightEl, "Condition") || "";
+        }
+
+        areas.push({
+            grade,
+            name: childTextByLocalName(areaEl, "Name"),
+            firstHeight,
+            maxHeight: { description: heightDesc || "-" }
+        });
+    }
+    return { areas };
+}
+
+// JSONL 1レコードを処理。津波電文かつ最新のものだけを採用して表示を更新する。
+function handleJAlertRecord(rec) {
+    if (!rec || rec.decoded !== true || !rec.xml) return;
+    // 津波電文の判定：chunk_type=issx、または見出し系フィールドに「津波」を含む。
+    const heads = `${rec.chunk_type || ""} ${rec.title || ""} ${rec.head_title || ""} ${rec.headline || ""}`;
+    if (String(rec.chunk_type || "").toLowerCase() !== "issx" && !heads.includes("津波")) return;
+
+    const pt = rec.packet_time || "";
+    if (pt && jalertLatestPacketTime && pt < jalertLatestPacketTime) return; // 古い電文は無視
+
+    const parsed = parseJAlertTsunamiXml(rec.xml);
+    if (!parsed) return;
+    if (pt) jalertLatestPacketTime = pt;
+    latestJAlert = parsed; // areas空＝J-Alert上は警報等なし → P2Pへ委譲される
+    updateDisplay();
+}
+
+// 受信バッファから完全な JSONL 行を取り出して処理する。
+// 改行区切りブリッジと「1メッセージ=1行（改行無し）」ブリッジの両方に対応。
+function pumpJAlertBuffer() {
+    let idx;
+    while ((idx = jalertBuffer.indexOf("\n")) >= 0) {
+        const line = jalertBuffer.slice(0, idx).trim();
+        jalertBuffer = jalertBuffer.slice(idx + 1);
+        if (line) { try { handleJAlertRecord(JSON.parse(line)); } catch(e) { console.error("J-Alert JSONL parse error", e); } }
+    }
+    const rest = jalertBuffer.trim();
+    if (rest) {
+        try { const rec = JSON.parse(rest); jalertBuffer = ""; handleJAlertRecord(rec); }
+        catch(e) { /* 断片は次メッセージまで保持 */ }
+    }
+}
+
+function startJAlertWebSocket() {
+    if (!JALERT_WS_URL) return; // 空指定なら無効
+    if (jalertSocket) { try { jalertSocket.close(); } catch(e) {} jalertSocket = null; }
+    if (jalertReconnectTimer) clearTimeout(jalertReconnectTimer);
+    jalertBuffer = "";
+    let sock;
+    try { sock = new WebSocket(JALERT_WS_URL); }
+    catch(e) { jalertReconnectTimer = setTimeout(startJAlertWebSocket, 5000); return; }
+    jalertSocket = sock;
+    sock.addEventListener("open", () => console.log("J-Alert bridge connected:", JALERT_WS_URL));
+    sock.addEventListener("message", event => {
+        if (typeof event.data === "string") { jalertBuffer += event.data; pumpJAlertBuffer(); }
+    });
+    sock.addEventListener("close", () => { jalertReconnectTimer = setTimeout(startJAlertWebSocket, 5000); });
+    sock.addEventListener("error", () => { try { sock.close(); } catch(e) {} });
 }
 
 const TEST_TSUNAMI_DATA = {
@@ -871,6 +1020,7 @@ function init() {
     } else {
         showNoTsunamiScreen();
         startTsunamiWebSocket();
+        startJAlertWebSocket();
     }
 
     if (document.fonts && document.fonts.ready) {
