@@ -1,10 +1,16 @@
+<img width="2560" height="1368" alt="IMG_20260707_190804" src="https://github.com/user-attachments/assets/6d42ae49-0fa0-4f15-8235-950df9321aae" />
+
+
+https://github.com/user-attachments/assets/a152882a-a061-4a11-a4f2-69483d4b9680
+
+
 # リアルタイム津波情報
 【2026/07/07】著作権侵害のリスクを避けるため、フォントをUDShinGoProからNoto Sans JPに変更しました。
 
 【2026/07/07】J-Alert メッセージからの取り込み By @serkenn
 
 
-このプロジェクトは、テレビ局の津波情報telopを模倣するように設計されており、HTMLとJavaScriptを使用して開発されています。
+このプロジェクトは、テレビの津波情報telopを模倣するように設計されており、HTMLとJavaScriptを使用して開発されています。
 
 【免責事項 / Disclaimer】
 - 本プロジェクトは参考資料として提供されるものであり、動作の正確性や品質を保証するものではありません。
@@ -55,13 +61,6 @@ node tools/jalert-ws-bridge.mjs
 ### 表示の優先順位
 
 P2P のライブ受信は維持したまま、**J-Alert 電文に警報等がある間はそれを優先表示**し、J-Alert 側が解除されると P2P の現況へ戻ります。JSONL に複数の津波電文がある場合は `packet_time` が最新のものを採用します。
-
-
-https://github.com/user-attachments/assets/a152882a-a061-4a11-a4f2-69483d4b9680
-
-
-<img width="2560" height="1440" alt="Screenshot 2026-07-07 08-09-04" src="https://github.com/user-attachments/assets/96fbc6ac-a62f-4ad3-91a3-287a9736eb42" />
-<img width="2560" height="1368" alt="0fd842b6f563bfa040d2b16e13020275" src="https://github.com/user-attachments/assets/bfa08efb-b456-4fd4-b8d7-fb1a466322ae" />
 
 
 
