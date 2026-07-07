@@ -1,5 +1,6 @@
 # リアルタイム津波情報
 【2026/07/07】著作権侵害のリスクを避けるため、フォントをUDShinGoProからNoto Sans JPに変更しました。
+
 【2026/07/07】J-Alert メッセージからの取り込み By @serkenn
 
 
@@ -12,7 +13,7 @@
 - 本コードは OpenAI-ChatGPT5.5 と Telezzz (https://x.com/@Telezzz_X) の共同作業により作成されました。
 
 
-## J-Alert メッセージからの取り込み By @serkenn in 2026/07/07
+## J-Alert メッセージからの取り込み By @serkenn
 
 P2P地震情報のライブ受信に加えて、**J-ALERT（全国瞬時警報システム）で受信した津波電文**からの表示にも対応しています。以下の SDR プラグインが出力する JSONL を取り込みます。
 
