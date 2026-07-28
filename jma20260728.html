@@ -1,0 +1,2452 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>津波情報オーバーレイ</title>
+
+<!--
+    【免責事項 / Disclaimer】
+    ・本项目仅作为参考资料提供，不保证其准确性、完整性或持续可用性。
+    ・本程序使用气象厅网站公开数据及 P2P 地震信息公开 API。
+    ・发生灾害时，请务必以气象厅、地方政府等官方发布的信息为准。
+-->
+
+<link rel="preload"
+      href="https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20M.otf"
+      as="font"
+      type="font/otf"
+      crossorigin="anonymous">
+
+<link rel="preload"
+      href="https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20DB.otf"
+      as="font"
+      type="font/otf"
+      crossorigin="anonymous">
+
+<link rel="preload"
+      href="https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20R.otf"
+      as="font"
+      type="font/otf"
+      crossorigin="anonymous">
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+html,
+body{
+    width:3840px;
+    height:2160px;
+    overflow:hidden;
+    background:transparent;
+}
+
+@font-face{
+    font-family:"UDShinGoM";
+    src:url("https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20M.otf") format("opentype");
+    font-display:block;
+}
+
+@font-face{
+    font-family:"UDShinGoDB";
+    src:url("https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20DB.otf") format("opentype");
+    font-display:block;
+}
+
+@font-face{
+    font-family:"UDShinGoR";
+    src:url("https://cdn.jsdelivr.net/gh/Zero4499/others@main/A%20OTF%20UD%E6%96%B0%E3%82%B4%20Pro%20R.otf") format("opentype");
+    font-display:block;
+}
+
+#main{
+    width:3840px;
+    height:2160px;
+    display:flex;
+    align-items:flex-end;
+    opacity:0;
+    visibility:hidden;
+}
+
+#main.ready{
+    opacity:1;
+    visibility:visible;
+}
+
+#block{
+    width:3840px;
+    display:flex;
+    flex-direction:column;
+    background:rgba(0, 0, 0, 0.6);
+    overflow:hidden;
+    position:relative;
+}
+
+#page-content{
+    width:100%;
+}
+
+.page{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-end;
+}
+
+/* 待機画面 */
+#no-tsunami-screen{
+    position:fixed;
+    left:0;
+    top:0;
+    width:3840px;
+    height:2160px;
+    background:rgba(0, 0, 0, 0.7);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:9999;
+}
+
+#no-tsunami-screen.show{
+    display:flex;
+}
+
+#no-tsunami-text{
+    font-family:"UDShinGoDB";
+    font-size:315px;
+    line-height:1.25;
+    color:#fff;
+    text-align:center;
+    white-space:nowrap;
+}
+
+:root{
+    --h:calc(2160px / 7);
+}
+
+/* 地点・到達時間・高度 */
+.header,
+.row{
+    display:grid;
+    grid-template-columns:2290px 700px 50px 800px;
+    height:var(--h);
+    font-family:"UDShinGoM";
+    font-size:210px;
+    line-height:1;
+    align-items:center;
+    color:#fff;
+    position:relative;
+}
+
+.header{
+    font-family:"UDShinGoM" !important;
+    font-weight:400 !important;
+}
+
+.header *{
+    font-family:"UDShinGoM" !important;
+    font-weight:400 !important;
+}
+
+.header.major{
+    background:#c800ff;
+}
+
+.header.warn{
+    background:#ff2801;
+}
+
+.header.watch{
+    background:#faf601;
+    color:#000;
+    font-family:"UDShinGoM" !important;
+}
+
+.row.divider::after{
+    content:"";
+    position:absolute;
+    bottom:-5px;
+    left:0;
+    width:100%;
+    height:10px;
+    background:#fff;
+    opacity:0.9;
+    z-index:10;
+    box-shadow:0 3px 6px rgba(0, 0, 0, 0.5);
+}
+
+.header-marker,
+.row-marker{
+    position:absolute;
+    top:50%;
+    width:10px;
+    height:250px;
+    transform:translateY(-50%);
+    z-index:30;
+    pointer-events:none;
+}
+
+.header-marker{
+    background:#fff;
+}
+
+.header.watch .header-marker{
+    background:#000;
+}
+
+.row-marker{
+    background:#fff;
+}
+
+.marker-x2242{
+    left:2242px;
+}
+
+.marker-x3035{
+    left:3035px;
+}
+
+.name{
+    grid-column:1;
+    padding-left:60px;
+    display:flex;
+    align-items:center;
+    width:2290px;
+    height:100%;
+    overflow:hidden;
+}
+
+.name-text{
+    display:inline-block;
+    white-space:nowrap;
+    transform-origin:left center;
+}
+
+.header-field{
+    position:absolute;
+    top:0;
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    pointer-events:none;
+}
+
+.header-field.first-wave{
+    left:2280px;
+    width:715px;
+}
+
+.header-field.max-height{
+    left:3090px;
+    width:680px;
+}
+
+.header-sub-title{
+    width:100%;
+    height:160px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    white-space:nowrap;
+    overflow:hidden;
+    font-family:"UDShinGoM" !important;
+    font-size:160px;
+    line-height:1;
+}
+
+.header-sub-inner{
+    height:160px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    white-space:nowrap;
+    overflow:hidden;
+    font-family:"UDShinGoM" !important;
+    font-size:160px;
+    line-height:1;
+}
+
+.sub-symbol-box{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+    height:160px;
+    overflow:visible;
+    margin-right:10px;
+    line-height:1;
+}
+
+.sub-symbol{
+    display:inline-block;
+    flex-shrink:0;
+    transform:scaleX(0.70);
+    transform-origin:center center;
+    line-height:1;
+    font-family:"UDShinGoM" !important;
+}
+
+.sub-text-wrap{
+    display:inline-block;
+    flex-shrink:0;
+    overflow:hidden;
+    white-space:nowrap;
+    height:160px;
+    line-height:1;
+}
+
+.sub-text{
+    display:inline-block;
+    white-space:nowrap;
+    transform-origin:left center;
+    line-height:1;
+    font-family:"UDShinGoM" !important;
+}
+
+/* 到達時間 */
+.row .arrival{
+    grid-column:2;
+    width:700px;
+    height:100%;
+    display:flex;
+    align-items:center;
+    overflow:hidden;
+    color:#f9f806;
+    font-family:"UDShinGoR","UDShinGoM";
+}
+
+.row .arrival *{
+    font-family:"UDShinGoR","UDShinGoM";
+}
+
+.arrival-text{
+    width:100%;
+    height:200px;
+    display:flex;
+    align-items:center;
+    white-space:nowrap;
+    font-family:"UDShinGoR","UDShinGoM";
+    font-size:150px;
+    line-height:1;
+}
+
+.arrival-text.condition-layout{
+    justify-content:center;
+    height:200px;
+    font-size:200px;
+}
+
+.condition-val{
+    display:inline-block;
+    height:200px;
+    line-height:1;
+    font-size:200px;
+    white-space:nowrap;
+    transform-origin:center center;
+}
+
+.arrival-text.time-layout{
+    justify-content:space-between;
+    padding:0;
+}
+
+.time-left-box{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    justify-content:center;
+    gap:4px;
+    transform-origin:left center;
+}
+
+.time-date-line{
+    font-size:85px;
+    line-height:1;
+    white-space:nowrap;
+}
+
+.time-ampm-line{
+    font-size:75px;
+    line-height:1;
+    white-space:nowrap;
+}
+
+.time-right-val{
+    display:inline-block;
+    font-size:190px;
+    line-height:1;
+    white-space:nowrap;
+    transform-origin:right center;
+}
+
+.spacer{
+    grid-column:3;
+    width:50px;
+    height:100%;
+}
+
+/* 最大予想高度 */
+.height{
+    grid-column:4;
+    width:800px;
+    height:100%;
+    background:#fff;
+    color:#000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:bold;
+}
+
+.header .height{
+    background:transparent;
+    color:inherit;
+}
+
+.height-text{
+    height:200px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:190px;
+    line-height:1;
+    white-space:nowrap;
+    font-family:"UDShinGoM";
+}
+
+.row.major .height-text{
+    color:#c800ff;
+}
+
+.row.warn .height-text{
+    color:#ff2801;
+}
+
+.row.watch .height-text{
+    color:#000;
+}
+</style>
+</head>
+
+<body>
+
+<div id="main">
+    <div id="block">
+        <div id="page-content"></div>
+    </div>
+</div>
+
+<div id="no-tsunami-screen">
+    <div id="no-tsunami-text">
+        現在、津波警報·注意報は<br>
+        発表されていません
+    </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================
+   API 设置
+========================================================= */
+
+// P2P 地震信息 WebSocket
+const WS_URL = "wss://api.p2pquake.net/v2/ws";
+
+// JMA 津波信息
+const JMA_TSUNAMI_BASE_URL =
+    "https://www.jma.go.jp/bosai/tsunami/data/";
+
+const JMA_TSUNAMI_LIST_URL =
+    `${JMA_TSUNAMI_BASE_URL}list.json`;
+
+// JMA 轮询间隔
+const JMA_POLL_INTERVAL = 30000;
+
+// 分页
+const PAGE_SIZE = 7;
+const PAGE_DURATION = 5000;
+const rowHeight = 2160 / 7;
+
+/* =========================================================
+   津波预报区代码
+========================================================= */
+
+const Tsunami_AreaCode = [
+    "120", "390", "600", "601", "391", "320", "731", "300",
+    "551", "772", "560", "800", "210", "802", "760", "220",
+    "740", "570", "590", "720", "341", "400", "240", "701",
+    "700", "773", "770", "771", "230", "321", "340", "201",
+    "200", "380", "361", "360", "310", "311", "330", "510",
+    "801", "750", "751", "522", "730", "540", "550", "312",
+    "580", "350", "370", "710", "711", "250", "521", "520",
+    "102", "101", "111", "110", "202", "530", "100", "500",
+    "610", "712"
+];
+
+const Tsunami_AreaName = [
+    "オホーツク海沿岸",
+    "愛知県外海",
+    "愛媛県宇和海沿岸",
+    "愛媛県瀬戸内海沿岸",
+    "伊勢・三河湾",
+    "伊豆諸島",
+    "壱岐・対馬",
+    "茨城県",
+    "隠岐",
+    "奄美群島・トカラ列島",
+    "岡山県",
+    "沖縄本島地方",
+    "岩手県",
+    "宮古島・八重山地方",
+    "宮崎県",
+    "宮城県",
+    "熊本県天草灘沿岸",
+    "広島県",
+    "香川県",
+    "佐賀県北部",
+    "佐渡",
+    "三重県南部",
+    "山形県",
+    "山口県瀬戸内海沿岸",
+    "山口県日本海沿岸",
+    "鹿児島県西部",
+    "鹿児島県東部",
+    "種子島・屋久島地方",
+    "秋田県",
+    "小笠原諸島",
+    "新潟県上中下越",
+    "青森県太平洋沿岸",
+    "青森県日本海沿岸",
+    "静岡県",
+    "石川県加賀",
+    "石川県能登",
+    "千葉県九十九里・外房",
+    "千葉県内房",
+    "相模湾・三浦半島",
+    "大阪府",
+    "大東島地方",
+    "大分県瀬戸内海沿岸",
+    "大分県豊後水道沿岸",
+    "淡路島南部",
+    "長崎県西方",
+    "鳥取県",
+    "島根県出雲・石見",
+    "東京湾内湾",
+    "徳島県",
+    "富山県",
+    "福井県",
+    "福岡県瀬戸内海沿岸",
+    "福岡県日本海沿岸",
+    "福島県",
+    "兵庫県瀬戸内海沿岸",
+    "兵庫県北部",
+    "北海道太平洋沿岸西部",
+    "北海道太平洋沿岸中部",
+    "北海道日本海沿岸南部",
+    "北海道日本海沿岸北部",
+    "陸奥湾",
+    "和歌山県",
+    "北海道太平洋沿岸東部",
+    "京都府",
+    "高知県",
+    "有明・八代海"
+];
+
+if (Tsunami_AreaCode.length !== Tsunami_AreaName.length) {
+    throw new Error("津波区域代码和区域名称数量不一致");
+}
+
+const TsunamiAreaNameByCode = new Map(
+    Tsunami_AreaCode.map((code, index) => [
+        String(code),
+        Tsunami_AreaName[index]
+    ])
+);
+
+/* =========================================================
+   JMA 警报种类代码
+
+   00：津波なし
+   50：(大)津波警報解除
+   51：津波警報
+   52：大津波警報 継続
+   53：大津波警報 新規
+   60：津波注意報解除
+   62：津波注意報
+   71～73：津波予報
+========================================================= */
+
+const JMA_WARNING_CODE_TO_GRADE = {
+    "51": "Warning",
+    "52": "MajorWarning",
+    "53": "MajorWarning",
+    "62": "Watch"
+};
+
+/* =========================================================
+   全局状态
+========================================================= */
+
+let pageTimer = null;
+let pageOffsets = [];
+let cachedPages = [];
+let currentPageIndex = 0;
+
+let tsunamiSocket = null;
+let reconnectTimer = null;
+
+let jmaPollTimer = null;
+let jmaRequesting = false;
+let hasSuccessfulJmaLoad = false;
+
+/*
+ * unknown  ：JMA 状态尚未确定
+ * active   ：有大津波警报、津波警报或津波注意报
+ * inactive ：没有警报和注意报
+ */
+let jmaTsunamiState = "unknown";
+
+// 最新 JMA 转换数据
+let latestJmaTsunamiData = null;
+
+// 最新 P2P 552
+let latestP2P552 = null;
+
+// 防止每次轮询都重新分页
+let latestJmaDetailKey = null;
+
+// 当前画面的状态键
+let displayedStateKey = null;
+
+/* =========================================================
+   通用工具
+========================================================= */
+
+function toArray(value) {
+    if (Array.isArray(value)) return value;
+
+    if (value === null || value === undefined) {
+        return [];
+    }
+
+    return [value];
+}
+
+function toHalfWidth(str) {
+    if (!str) return str;
+
+    return str.toString().replace(
+        /[\uFF01-\uFF5E\u3000]/g,
+        character => {
+            return character === "\u3000"
+                ? " "
+                : String.fromCharCode(
+                    character.charCodeAt(0) - 0xFEE0
+                );
+        }
+    );
+}
+
+function escapeHtml(str) {
+    if (!str) return "";
+
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function readJmaValue(value) {
+    if (value === null || value === undefined) {
+        return "";
+    }
+
+    if (
+        typeof value === "string" ||
+        typeof value === "number"
+    ) {
+        return String(value);
+    }
+
+    if (typeof value === "object") {
+        const candidates = [
+            value.Value,
+            value.value,
+            value.Text,
+            value.text,
+            value.Description,
+            value.description,
+            value._,
+            value._value,
+            value._text,
+            value.content
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate !== null &&
+                candidate !== undefined &&
+                candidate !== ""
+            ) {
+                return String(candidate);
+            }
+        }
+    }
+
+    return "";
+}
+
+function normalizeAreaName(name) {
+    return toHalfWidth(String(name || ""))
+        .normalize("NFKC")
+        .replace(/[·･]/g, "・")
+        .replace(/\s+/g, "")
+        .trim();
+}
+
+/* =========================================================
+   警报等级
+========================================================= */
+
+function mapGrade(grade) {
+    if (grade === "MajorWarning") {
+        return {
+            label: "大津波警報",
+            cls: "major"
+        };
+    }
+
+    if (grade === "Warning") {
+        return {
+            label: "津波警報",
+            cls: "warn"
+        };
+    }
+
+    if (grade === "Watch") {
+        return {
+            label: "津波注意報",
+            cls: "watch"
+        };
+    }
+
+    return null;
+}
+
+function getGradePriority(grade) {
+    if (grade === "MajorWarning") return 3;
+    if (grade === "Warning") return 2;
+    if (grade === "Watch") return 1;
+
+    return 0;
+}
+
+/* =========================================================
+   第一波时间处理
+========================================================= */
+
+function mapConditionText(condition) {
+    if (!condition) return "";
+
+    const text = toHalfWidth(condition).trim();
+
+    const conditionMap = {
+        "ただちに津波来襲と予測": "すぐ来る",
+        "津波到達中と推測": "到達か",
+        "第1波の到達を確認": "すでに到達",
+        "既に津波到達と推測": "到達か",
+        "既に津波到達と予測": "すぐ来る",
+        "既に津波到達": "すでに到達",
+        "津波到達と推測": "到達か"
+    };
+
+    return conditionMap[text] || text;
+}
+
+function parseArrivalTime(value) {
+    if (!value || value === "-") {
+        return null;
+    }
+
+    const str = toHalfWidth(value);
+
+    const match = str.match(
+        /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[T\s](\d{1,2}):(\d{2})/
+    );
+
+    if (!match) return null;
+
+    const day = Number(match[3]);
+    const hour24 = Number(match[4]);
+    const ampm = hour24 < 12 ? "午前" : "午後";
+    const hour12 =
+        hour24 % 12 === 0
+            ? 12
+            : hour24 % 12;
+
+    return {
+        day: `${day}日`,
+        ampm,
+        time12: `${hour12}:${match[5]}`
+    };
+}
+
+function getArrivalInfo(firstHeight) {
+    if (!firstHeight) {
+        return {
+            type: "empty",
+            text: "-"
+        };
+    }
+
+    if (firstHeight.condition) {
+        return {
+            type: "condition",
+            text: mapConditionText(
+                firstHeight.condition
+            )
+        };
+    }
+
+    if (firstHeight.arrivalTime) {
+        const parsed = parseArrivalTime(
+            firstHeight.arrivalTime
+        );
+
+        return parsed
+            ? {
+                type: "arrivalTime",
+                data: parsed
+            }
+            : {
+                type: "condition",
+                text: toHalfWidth(
+                    firstHeight.arrivalTime
+                )
+            };
+    }
+
+    return {
+        type: "empty",
+        text: "-"
+    };
+}
+
+function buildArrivalHtml(arrival) {
+    if (
+        !arrival ||
+        arrival.type === "empty"
+    ) {
+        return `
+            <div class="arrival-text condition-layout">
+                -
+            </div>
+        `;
+    }
+
+    if (
+        arrival.type === "arrivalTime" &&
+        arrival.data
+    ) {
+        const data = arrival.data;
+
+        return `
+            <div class="arrival-text time-layout">
+                <div class="time-left-box">
+                    <span class="time-date-line">
+                        ${escapeHtml(data.day)}
+                    </span>
+                    <span class="time-ampm-line">
+                        ${escapeHtml(data.ampm)}
+                    </span>
+                </div>
+                <span class="time-right-val">
+                    ${escapeHtml(data.time12)}
+                </span>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="arrival-text condition-layout">
+            <span class="condition-val">
+                ${escapeHtml(arrival.text)}
+            </span>
+        </div>
+    `;
+}
+
+/* =========================================================
+   数据转换
+========================================================= */
+
+function flatten(data) {
+    const list = [];
+
+    const target =
+        Array.isArray(data)
+            ? data[0]
+            : data;
+
+    if (
+        !target ||
+        !Array.isArray(target.areas)
+    ) {
+        return list;
+    }
+
+    target.areas.forEach(area => {
+        const gradeInfo =
+            mapGrade(area?.grade);
+
+        if (!gradeInfo) return;
+
+        list.push({
+            label: gradeInfo.label,
+            cls: gradeInfo.cls,
+            grade: area.grade,
+            code: String(area?.code || ""),
+            name: area?.name || "-",
+            arrival: getArrivalInfo(
+                area?.firstHeight
+            ),
+            height: toHalfWidth(
+                area?.maxHeight?.description ||
+                "-"
+            )
+        });
+    });
+
+    return list;
+}
+
+function groupByGrade(list) {
+    const groups = [];
+    let currentGrade = null;
+    let currentGroup = null;
+
+    for (const item of list) {
+        if (item.grade !== currentGrade) {
+            currentGrade = item.grade;
+
+            currentGroup = {
+                grade: item.grade,
+                label: item.label,
+                cls: item.cls,
+                areas: []
+            };
+
+            groups.push(currentGroup);
+        }
+
+        currentGroup.areas.push(item);
+    }
+
+    return groups;
+}
+
+function paginateGroups(groups) {
+    const pages = [];
+    let currentPage = [];
+    let currentCount = 0;
+
+    for (const group of groups) {
+        let remainingAreas = [
+            ...group.areas
+        ];
+
+        while (remainingAreas.length > 0) {
+            if (
+                currentCount > 0 &&
+                PAGE_SIZE - currentCount < 2
+            ) {
+                pages.push(currentPage);
+                currentPage = [];
+                currentCount = 0;
+                continue;
+            }
+
+            currentPage.push({
+                type: "header",
+                cls: group.cls,
+                name: group.label
+            });
+
+            currentCount += 1;
+
+            const areasToPlace =
+                remainingAreas.splice(
+                    0,
+                    PAGE_SIZE - currentCount
+                );
+
+            for (const area of areasToPlace) {
+                currentPage.push({
+                    type: "row",
+                    cls: area.cls,
+                    name: area.name,
+                    arrival: area.arrival,
+                    height: area.height
+                });
+
+                currentCount += 1;
+            }
+
+            if (currentCount >= PAGE_SIZE) {
+                pages.push(currentPage);
+                currentPage = [];
+                currentCount = 0;
+            }
+        }
+    }
+
+    if (currentPage.length > 0) {
+        pages.push(currentPage);
+    }
+
+    pages.forEach(page => {
+        for (
+            let index = 0;
+            index < page.length;
+            index++
+        ) {
+            page[index].divider =
+                page[index].type === "row" &&
+                page[index + 1] &&
+                page[index + 1].type === "row";
+        }
+    });
+
+    return pages;
+}
+
+/* =========================================================
+   HTML 构建
+========================================================= */
+
+function buildHeaderSubTitle(text, limit) {
+    return `
+        <div class="header-sub-title" data-max="${limit}">
+            <div class="header-sub-inner">
+                <span class="sub-symbol-box">
+                    <span class="sub-symbol">▼</span>
+                </span>
+                <span class="sub-text-wrap">
+                    <span class="sub-text">
+                        ${escapeHtml(text)}
+                    </span>
+                </span>
+            </div>
+        </div>
+    `;
+}
+
+function buildPageHtml(rows) {
+    const pageHeight =
+        rows.length * rowHeight;
+
+    let html = `
+        <div class="page"
+             style="height:${pageHeight}px;">
+    `;
+
+    rows.forEach((row, index) => {
+        const zIndexStyle =
+            `style="z-index:${100 - index};"`;
+
+        if (row.type === "header") {
+            html += `
+                <div class="header ${row.cls}"
+                     ${zIndexStyle}>
+
+                    <div class="header-marker marker-x2242"></div>
+                    <div class="header-marker marker-x3035"></div>
+
+                    <div class="name">
+                        <span class="name-text">
+                            ${escapeHtml(row.name)}
+                        </span>
+                    </div>
+
+                    <div class="header-field first-wave">
+                        ${buildHeaderSubTitle(
+                            "第1波予想",
+                            715
+                        )}
+                    </div>
+
+                    <div class="header-field max-height">
+                        ${buildHeaderSubTitle(
+                            "最大予想",
+                            680
+                        )}
+                    </div>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="row ${row.cls || ""}
+                            ${row.divider ? "divider" : ""}"
+                     ${zIndexStyle}>
+
+                    <div class="row-marker marker-x2242"></div>
+
+                    <div class="name">
+                        <span class="name-text">
+                            ${escapeHtml(row.name)}
+                        </span>
+                    </div>
+
+                    <div class="arrival">
+                        ${buildArrivalHtml(row.arrival)}
+                    </div>
+
+                    <div class="spacer"></div>
+
+                    <div class="height">
+                        <span class="height-text">
+                            ${escapeHtml(row.height)}
+                        </span>
+                    </div>
+                </div>
+            `;
+        }
+    });
+
+    html += "</div>";
+
+    return html;
+}
+
+/* =========================================================
+   分页
+========================================================= */
+
+function showPage(index) {
+    const pageContent =
+        document.getElementById(
+            "page-content"
+        );
+
+    currentPageIndex = index;
+
+    pageContent.style.transform =
+        `translateY(${
+            -pageOffsets[index] || 0
+        }px)`;
+
+    const block =
+        document.getElementById("block");
+
+    if (cachedPages[index]) {
+        block.style.height =
+            `${
+                cachedPages[index].length *
+                rowHeight
+            }px`;
+    }
+}
+
+function startPagination(pages) {
+    cachedPages = pages;
+    pageOffsets = [];
+
+    let offset = 0;
+
+    pages.forEach(page => {
+        pageOffsets.push(offset);
+        offset +=
+            page.length * rowHeight;
+    });
+
+    if (pageTimer) {
+        clearInterval(pageTimer);
+        pageTimer = null;
+    }
+
+    showPage(0);
+
+    if (pages.length > 1) {
+        pageTimer = setInterval(() => {
+            showPage(
+                (currentPageIndex + 1) %
+                pages.length
+            );
+        }, PAGE_DURATION);
+    }
+}
+
+/* =========================================================
+   文字缩放
+========================================================= */
+
+function scaleTextX(
+    selector,
+    maxWidth,
+    origin = "center center"
+) {
+    document
+        .querySelectorAll(selector)
+        .forEach(element => {
+            element.style.transformOrigin =
+                origin;
+
+            element.style.transform = "none";
+
+            const width =
+                element.offsetWidth;
+
+            if (width > maxWidth) {
+                element.style.transform =
+                    `scaleX(${
+                        maxWidth / width
+                    })`;
+            }
+        });
+}
+
+function scaleHeaderSubTitles() {
+    document
+        .querySelectorAll(
+            ".header-sub-title"
+        )
+        .forEach(box => {
+            const maxWidth = Number(
+                box.getAttribute("data-max")
+            );
+
+            const inner =
+                box.querySelector(
+                    ".header-sub-inner"
+                );
+
+            const symbol =
+                box.querySelector(
+                    ".sub-symbol"
+                );
+
+            const wrap =
+                box.querySelector(
+                    ".sub-text-wrap"
+                );
+
+            const text =
+                box.querySelector(
+                    ".sub-text"
+                );
+
+            if (
+                !inner ||
+                !symbol ||
+                !wrap ||
+                !text
+            ) {
+                return;
+            }
+
+            inner.style.width = "auto";
+            text.style.transform = "none";
+            wrap.style.width = "auto";
+
+            const visualSymbolWidth =
+                symbol
+                    .getBoundingClientRect()
+                    .width;
+
+            const marginRight =
+                parseFloat(
+                    getComputedStyle(
+                        symbol.parentElement
+                    ).marginRight
+                ) || 0;
+
+            symbol.parentElement.style.width =
+                `${visualSymbolWidth}px`;
+
+            const availableWidth =
+                maxWidth -
+                visualSymbolWidth -
+                marginRight;
+
+            const naturalTextWidth =
+                text.offsetWidth;
+
+            if (
+                naturalTextWidth >
+                availableWidth
+            ) {
+                wrap.style.width =
+                    `${availableWidth}px`;
+
+                text.style.transform =
+                    `scaleX(${
+                        availableWidth /
+                        naturalTextWidth
+                    })`;
+            } else {
+                wrap.style.width =
+                    `${naturalTextWidth}px`;
+            }
+
+            inner.style.width =
+                `${
+                    visualSymbolWidth +
+                    marginRight +
+                    Math.min(
+                        naturalTextWidth,
+                        availableWidth
+                    )
+                }px`;
+        });
+}
+
+/* =========================================================
+   状态画面
+========================================================= */
+
+function showStatusScreen(html, stateKey) {
+    if (
+        stateKey &&
+        displayedStateKey === stateKey
+    ) {
+        return;
+    }
+
+    displayedStateKey =
+        stateKey || null;
+
+    const main =
+        document.getElementById("main");
+
+    const noTsunami =
+        document.getElementById(
+            "no-tsunami-screen"
+        );
+
+    const block =
+        document.getElementById("block");
+
+    const text =
+        document.getElementById(
+            "no-tsunami-text"
+        );
+
+    if (pageTimer) {
+        clearInterval(pageTimer);
+        pageTimer = null;
+    }
+
+    document.getElementById(
+        "page-content"
+    ).innerHTML = "";
+
+    block.style.height = "0px";
+    main.classList.remove("ready");
+
+    text.innerHTML = html;
+    noTsunami.classList.add("show");
+}
+
+function showNoTsunamiScreen() {
+    showStatusScreen(
+        `
+            現在、津波警報·注意報は<br>
+            発表されていません
+        `,
+        "NO_TSUNAMI"
+    );
+}
+
+function showLoadingScreen() {
+    showStatusScreen(
+        `
+            津波情報を<br>
+            取得しています
+        `,
+        "LOADING"
+    );
+}
+
+function showWaitingForDetailsScreen() {
+    showStatusScreen(
+        `
+            津波警報·注意報が発表中です<br>
+            詳細情報を取得しています
+        `,
+        "WAITING_DETAILS"
+    );
+}
+
+function showLoadErrorScreen() {
+    showStatusScreen(
+        `
+            津波情報を<br>
+            取得できません
+        `,
+        "LOAD_ERROR"
+    );
+}
+
+/* =========================================================
+   渲染
+========================================================= */
+
+function renderFromTsunamiData(
+    data,
+    stateKey = null
+) {
+    const list = flatten(data);
+
+    /*
+     * 相同等级必须连续，
+     * 否则 groupByGrade 会生成重复标题。
+     */
+    list.sort((left, right) => {
+        return (
+            getGradePriority(right.grade) -
+            getGradePriority(left.grade)
+        );
+    });
+
+    const groups =
+        groupByGrade(list);
+
+    const pages =
+        paginateGroups(groups);
+
+    if (pages.length === 0) {
+        showNoTsunamiScreen();
+        return;
+    }
+
+    if (
+        stateKey &&
+        displayedStateKey === stateKey
+    ) {
+        return;
+    }
+
+    displayedStateKey =
+        stateKey || null;
+
+    const main =
+        document.getElementById("main");
+
+    const pageContent =
+        document.getElementById(
+            "page-content"
+        );
+
+    main.classList.remove("ready");
+
+    document
+        .getElementById(
+            "no-tsunami-screen"
+        )
+        .classList.remove("show");
+
+    let allHtml = "";
+
+    pages.forEach(page => {
+        allHtml += buildPageHtml(page);
+    });
+
+    pageContent.innerHTML = allHtml;
+
+    scaleTextX(
+        ".name-text",
+        2290 - 60,
+        "left center"
+    );
+
+    scaleHeaderSubTitles();
+
+    scaleTextX(
+        ".condition-val",
+        700,
+        "center center"
+    );
+
+    scaleTextX(
+        ".time-left-box",
+        200,
+        "left center"
+    );
+
+    scaleTextX(
+        ".time-right-val",
+        480,
+        "right center"
+    );
+
+    scaleTextX(
+        ".height-text",
+        760,
+        "center center"
+    );
+
+    startPagination(pages);
+    main.classList.add("ready");
+}
+
+function isValidTsunamiData(data) {
+    return Boolean(
+        data &&
+        Number(data.code) === 552 &&
+        data.cancelled !== true &&
+        Array.isArray(data.areas) &&
+        data.areas.length > 0
+    );
+}
+
+/* =========================================================
+   JMA list.json 解析
+========================================================= */
+
+function isJmaVtse41(report) {
+    return /_VTSE41_[^/]*\.json$/i.test(
+        String(report?.json || "")
+    );
+}
+
+function getJmaControlTime(report) {
+    const controlTime =
+        String(report?.ctt || "");
+
+    if (/^\d{14}$/.test(controlTime)) {
+        return controlTime;
+    }
+
+    const timestamp = Date.parse(
+        report?.rdt ||
+        report?.at ||
+        ""
+    );
+
+    if (Number.isFinite(timestamp)) {
+        return String(timestamp)
+            .padStart(14, "0");
+    }
+
+    return "";
+}
+
+function selectLatestVtse41ByEvent(list) {
+    const latestByEvent = new Map();
+
+    for (const report of toArray(list)) {
+        if (!isJmaVtse41(report)) {
+            continue;
+        }
+
+        const eventId =
+            String(report?.eid || "");
+
+        if (!eventId) continue;
+
+        const previous =
+            latestByEvent.get(eventId);
+
+        if (
+            !previous ||
+            getJmaControlTime(report) >
+                getJmaControlTime(previous)
+        ) {
+            latestByEvent.set(
+                eventId,
+                report
+            );
+        }
+    }
+
+    return Array.from(
+        latestByEvent.values()
+    );
+}
+
+function isActiveJmaListKind(kindText) {
+    const value = toHalfWidth(
+        String(kindText || "")
+    ).trim();
+
+    if (
+        value.includes("解除") ||
+        value.includes("取消")
+    ) {
+        return false;
+    }
+
+    if (value.includes("大津波警報")) {
+        return true;
+    }
+
+    if (value.includes("津波注意報")) {
+        return true;
+    }
+
+    /*
+     * “津波予報”必须排除。
+     */
+    if (
+        value.includes("津波警報") &&
+        !value.includes("津波予報")
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+function hasActiveJmaWarning(report) {
+    return toArray(report?.kind)
+        .some(item => {
+            return isActiveJmaListKind(
+                item?.kind
+            );
+        });
+}
+
+function selectActiveJmaReports(list) {
+    return selectLatestVtse41ByEvent(list)
+        .filter(hasActiveJmaWarning)
+        .sort((left, right) => {
+            return getJmaControlTime(right)
+                .localeCompare(
+                    getJmaControlTime(left)
+                );
+        });
+}
+
+/* =========================================================
+   JMA 详细 JSON 解析
+========================================================= */
+
+function mapJmaDetailGrade(item) {
+    const kind =
+        item?.Category?.Kind || {};
+
+    const warningCode =
+        String(kind?.Code || "").trim();
+
+    /*
+     * 优先使用详细 JSON 中真正的警报代码。
+     */
+    if (
+        Object.prototype.hasOwnProperty.call(
+            JMA_WARNING_CODE_TO_GRADE,
+            warningCode
+        )
+    ) {
+        return JMA_WARNING_CODE_TO_GRADE[
+            warningCode
+        ];
+    }
+
+    /*
+     * 代码不存在时使用名称后备。
+     */
+    const warningName = toHalfWidth(
+        String(kind?.Name || "")
+    ).trim();
+
+    if (
+        warningName.includes("解除") ||
+        warningName.includes("取消") ||
+        warningName.includes("予報")
+    ) {
+        return null;
+    }
+
+    if (
+        warningName.includes(
+            "大津波警報"
+        )
+    ) {
+        return "MajorWarning";
+    }
+
+    if (
+        warningName.includes(
+            "津波警報"
+        )
+    ) {
+        return "Warning";
+    }
+
+    if (
+        warningName.includes(
+            "津波注意報"
+        )
+    ) {
+        return "Watch";
+    }
+
+    return null;
+}
+
+function convertJmaFirstHeight(
+    firstHeight
+) {
+    if (!firstHeight) return null;
+
+    const arrivalTime =
+        readJmaValue(
+            firstHeight?.ArrivalTime
+        ).trim();
+
+    const condition =
+        readJmaValue(
+            firstHeight?.Condition
+        ).trim();
+
+    if (!arrivalTime && !condition) {
+        return null;
+    }
+
+    return {
+        arrivalTime:
+            arrivalTime || null,
+        condition:
+            condition || null
+    };
+}
+
+function formatJmaForecastHeight(
+    maxHeight
+) {
+    if (!maxHeight) return "-";
+
+    let height = toHalfWidth(
+        readJmaValue(
+            maxHeight?.TsunamiHeight
+        )
+    ).trim();
+
+    const condition = toHalfWidth(
+        readJmaValue(
+            maxHeight?.Condition
+        )
+    ).trim();
+
+    if (!height) {
+        return condition || "-";
+    }
+
+    /*
+     * 定性表达。
+     */
+    if (
+        height.includes("巨大") ||
+        height.includes("高い")
+    ) {
+        return height;
+    }
+
+    let rising = "";
+
+    if (height.includes("+")) {
+        height = height.replace(/\+/g, "");
+        rising = "（上昇中）";
+    }
+
+    if (
+        height.startsWith(">=") ||
+        height.startsWith("≧") ||
+        height.startsWith(">")
+    ) {
+        height = height
+            .replace(/^>=/, "")
+            .replace(/^≧/, "")
+            .replace(/^>/, "");
+
+        if (
+            !/m$/i.test(height) &&
+            !height.includes("メートル")
+        ) {
+            height += "m";
+        }
+
+        return `${height}以上${rising}`;
+    }
+
+    if (height.startsWith("<")) {
+        height = height.replace(/^</, "");
+
+        if (
+            !/m$/i.test(height) &&
+            !height.includes("メートル")
+        ) {
+            height += "m";
+        }
+
+        return `${height}未満${rising}`;
+    }
+
+    if (
+        !/m$/i.test(height) &&
+        !height.includes("メートル")
+    ) {
+        height += "m";
+    }
+
+    return `${height}${rising}`;
+}
+
+function convertJmaDetailTo552(
+    detail,
+    listReport
+) {
+    const forecast =
+        detail?.Body
+            ?.Tsunami
+            ?.Forecast;
+
+    const items =
+        toArray(forecast?.Item);
+
+    const areas = [];
+
+    for (const item of items) {
+        const grade =
+            mapJmaDetailGrade(item);
+
+        /*
+         * 解除、津波なし、津波预报全部排除。
+         */
+        if (!grade) continue;
+
+        const areaCode =
+            String(
+                item?.Area?.Code || ""
+            ).trim();
+
+        const detailAreaName =
+            String(
+                item?.Area?.Name || ""
+            ).trim();
+
+        const areaName =
+            detailAreaName ||
+            TsunamiAreaNameByCode.get(
+                areaCode
+            ) ||
+            areaCode ||
+            "-";
+
+        const firstHeight =
+            convertJmaFirstHeight(
+                item?.FirstHeight
+            );
+
+        const height =
+            formatJmaForecastHeight(
+                item?.MaxHeight
+            );
+
+        areas.push({
+            grade,
+            code: areaCode,
+            name: areaName,
+            firstHeight,
+            maxHeight: {
+                description: height
+            }
+        });
+    }
+
+    const issueTime =
+        detail?.Head?.ReportDateTime ||
+        detail?.Control?.DateTime ||
+        listReport?.rdt ||
+        "";
+
+    const eventId =
+        detail?.Head?.EventID ||
+        listReport?.eid ||
+        "";
+
+    return {
+        code: 552,
+        cancelled: areas.length === 0,
+        source: "JMA",
+        eventId,
+        issue: {
+            time: issueTime
+        },
+        areas
+    };
+}
+
+function mergeJma552Messages(messages) {
+    const areaMap = new Map();
+
+    for (const message of messages) {
+        for (const area of toArray(
+            message?.areas
+        )) {
+            const key =
+                String(
+                    area?.code ||
+                    normalizeAreaName(
+                        area?.name
+                    )
+                );
+
+            if (!key) continue;
+
+            const previous =
+                areaMap.get(key);
+
+            if (!previous) {
+                areaMap.set(key, area);
+                continue;
+            }
+
+            const newPriority =
+                getGradePriority(
+                    area.grade
+                );
+
+            const previousPriority =
+                getGradePriority(
+                    previous.grade
+                );
+
+            /*
+             * 多个事件影响同一区域时，
+             * 保留更高等级。
+             */
+            if (
+                newPriority >
+                previousPriority
+            ) {
+                areaMap.set(key, area);
+            }
+        }
+    }
+
+    const areas =
+        Array.from(
+            areaMap.values()
+        ).sort((left, right) => {
+            return (
+                getGradePriority(
+                    right.grade
+                ) -
+                getGradePriority(
+                    left.grade
+                )
+            );
+        });
+
+    return {
+        code: 552,
+        cancelled: areas.length === 0,
+        source: "JMA",
+        areas
+    };
+}
+
+/* =========================================================
+   JMA 请求
+========================================================= */
+
+async function fetchJmaJson(url) {
+    const separator =
+        url.includes("?") ? "&" : "?";
+
+    const response = await fetch(
+        `${url}${separator}_=${Date.now()}`,
+        {
+            method: "GET",
+            cache: "no-store",
+            headers: {
+                "Accept": "application/json"
+            }
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `JMA HTTP ${response.status}: ${url}`
+        );
+    }
+
+    return response.json();
+}
+
+async function fetchJmaTsunamiList() {
+    const list = await fetchJmaJson(
+        JMA_TSUNAMI_LIST_URL
+    );
+
+    if (!Array.isArray(list)) {
+        throw new Error(
+            "JMA list.json 返回内容不是数组"
+        );
+    }
+
+    return list;
+}
+
+async function fetchJmaTsunamiDetail(
+    report
+) {
+    const fileName =
+        String(report?.json || "");
+
+    if (
+        !fileName ||
+        !/^[A-Za-z0-9_.-]+\.json$/.test(
+            fileName
+        )
+    ) {
+        throw new Error(
+            `无效的 JMA 详细文件名：${fileName}`
+        );
+    }
+
+    return fetchJmaJson(
+        `${JMA_TSUNAMI_BASE_URL}${fileName}`
+    );
+}
+
+/* =========================================================
+   JMA 状态同步
+========================================================= */
+
+async function syncJmaTsunamiState() {
+    if (jmaRequesting) return;
+
+    jmaRequesting = true;
+
+    try {
+        const list =
+            await fetchJmaTsunamiList();
+
+        /*
+         * 每个 eid 只取最新 VTSE41，
+         * 然后排除解除和津波预报。
+         */
+        const activeReports =
+            selectActiveJmaReports(list);
+
+        hasSuccessfulJmaLoad = true;
+
+        if (
+            activeReports.length === 0
+        ) {
+            jmaTsunamiState =
+                "inactive";
+
+            latestJmaTsunamiData =
+                null;
+
+            latestJmaDetailKey =
+                "NO_ACTIVE_WARNING";
+
+            showNoTsunamiScreen();
+            return;
+        }
+
+        jmaTsunamiState = "active";
+
+        const detailKey =
+            activeReports
+                .map(report => {
+                    return String(
+                        report?.json || ""
+                    );
+                })
+                .sort()
+                .join("|");
+
+        /*
+         * 文件名没有变化时，
+         * 不重置当前分页。
+         */
+        if (
+            detailKey ===
+                latestJmaDetailKey &&
+            isValidTsunamiData(
+                latestJmaTsunamiData
+            )
+        ) {
+            return;
+        }
+
+        /*
+         * 如果还没有任何可显示的数据，
+         * 才显示等待画面。
+         */
+        if (
+            !isValidTsunamiData(
+                latestP2P552
+            ) &&
+            !isValidTsunamiData(
+                latestJmaTsunamiData
+            )
+        ) {
+            showWaitingForDetailsScreen();
+        }
+
+        const details =
+            await Promise.all(
+                activeReports.map(
+                    async report => {
+                        const detail =
+                            await fetchJmaTsunamiDetail(
+                                report
+                            );
+
+                        return {
+                            report,
+                            detail
+                        };
+                    }
+                )
+            );
+
+        const convertedMessages =
+            details.map(entry => {
+                return convertJmaDetailTo552(
+                    entry.detail,
+                    entry.report
+                );
+            });
+
+        const mergedMessage =
+            mergeJma552Messages(
+                convertedMessages
+            );
+
+        /*
+         * list.json 表示有警报，
+         * 但详细 JSON 解析不到区域时，
+         * 不能错误判断成解除。
+         */
+        if (
+            !isValidTsunamiData(
+                mergedMessage
+            )
+        ) {
+            throw new Error(
+                "JMA 详细 JSON 中没有可识别的警报区域"
+            );
+        }
+
+        latestJmaDetailKey =
+            detailKey;
+
+        latestJmaTsunamiData =
+            mergedMessage;
+
+        renderFromTsunamiData(
+            mergedMessage,
+            `JMA:${detailKey}`
+        );
+    } catch (error) {
+        console.error(
+            "JMA 津波信息获取失败：",
+            error
+        );
+
+        /*
+         * 获取失败不等于没有津波。
+         * 已有画面时保留最后状态。
+         */
+        if (!hasSuccessfulJmaLoad) {
+            jmaTsunamiState =
+                "unknown";
+
+            if (
+                isValidTsunamiData(
+                    latestP2P552
+                )
+            ) {
+                renderFromTsunamiData(
+                    latestP2P552,
+                    "P2P:FALLBACK"
+                );
+            } else {
+                showLoadErrorScreen();
+            }
+        }
+    } finally {
+        jmaRequesting = false;
+    }
+}
+
+function startJmaTsunamiPolling() {
+    if (jmaPollTimer) {
+        clearInterval(jmaPollTimer);
+        jmaPollTimer = null;
+    }
+
+    syncJmaTsunamiState();
+
+    jmaPollTimer = setInterval(() => {
+        syncJmaTsunamiState();
+    }, JMA_POLL_INTERVAL);
+}
+
+/* =========================================================
+   P2P WebSocket
+========================================================= */
+
+function getP2PMessageKey(message) {
+    const issueTime =
+        message?.issue?.time ||
+        message?.time ||
+        message?.created_at ||
+        "";
+
+    const areaSignature =
+        toArray(message?.areas)
+            .map(area => {
+                return [
+                    area?.grade || "",
+                    area?.name || "",
+                    area?.firstHeight
+                        ?.arrivalTime || "",
+                    area?.firstHeight
+                        ?.condition || "",
+                    area?.maxHeight
+                        ?.description || ""
+                ].join(":");
+            })
+            .join("|");
+
+    return `P2P:${issueTime}:${areaSignature}`;
+}
+
+function startTsunamiWebSocket() {
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+
+    const oldSocket =
+        tsunamiSocket;
+
+    if (oldSocket) {
+        tsunamiSocket = null;
+
+        try {
+            oldSocket.close();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    const socket =
+        new WebSocket(WS_URL);
+
+    tsunamiSocket = socket;
+
+    socket.addEventListener(
+        "open",
+        () => {
+            if (
+                socket !== tsunamiSocket
+            ) {
+                return;
+            }
+
+            console.log(
+                "WebSocket Connected"
+            );
+
+            /*
+             * 重连后检查 JMA，
+             * 恢复断线期间的当前状态。
+             */
+            syncJmaTsunamiState();
+        }
+    );
+
+    socket.addEventListener(
+        "message",
+        event => {
+            if (
+                socket !== tsunamiSocket
+            ) {
+                return;
+            }
+
+            try {
+                const message =
+                    JSON.parse(event.data);
+
+                if (
+                    Number(message?.code) !==
+                    552
+                ) {
+                    return;
+                }
+
+                latestP2P552 = message;
+
+                /*
+                 * P2P 有有效 552 时立即显示，
+                 * 保留原来的实时性。
+                 */
+                if (
+                    isValidTsunamiData(
+                        message
+                    )
+                ) {
+                    renderFromTsunamiData(
+                        message,
+                        getP2PMessageKey(
+                            message
+                        )
+                    );
+                }
+
+                /*
+                 * 取消消息不直接判定无津波，
+                 * 而是由 JMA 再确认当前状态。
+                 */
+                syncJmaTsunamiState();
+            } catch (error) {
+                console.error(
+                    "P2P WebSocket 消息解析失败：",
+                    error
+                );
+            }
+        }
+    );
+
+    socket.addEventListener(
+        "close",
+        () => {
+            if (
+                socket !== tsunamiSocket
+            ) {
+                return;
+            }
+
+            console.log(
+                "WebSocket Closed. Reconnecting..."
+            );
+
+            reconnectTimer =
+                setTimeout(() => {
+                    if (
+                        socket ===
+                        tsunamiSocket
+                    ) {
+                        startTsunamiWebSocket();
+                    }
+                }, 5000);
+        }
+    );
+
+    socket.addEventListener(
+        "error",
+        error => {
+            if (
+                socket !== tsunamiSocket
+            ) {
+                return;
+            }
+
+            console.error(
+                "WebSocket Error:",
+                error
+            );
+
+            try {
+                socket.close();
+            } catch (closeError) {
+                console.error(
+                    closeError
+                );
+            }
+        }
+    );
+}
+
+/* =========================================================
+   页面事件
+========================================================= */
+
+window.addEventListener(
+    "online",
+    () => {
+        syncJmaTsunamiState();
+
+        if (
+            !tsunamiSocket ||
+            tsunamiSocket.readyState ===
+                WebSocket.CLOSED
+        ) {
+            startTsunamiWebSocket();
+        }
+    }
+);
+
+document.addEventListener(
+    "visibilitychange",
+    () => {
+        if (!document.hidden) {
+            syncJmaTsunamiState();
+        }
+    }
+);
+
+/* =========================================================
+   初始化
+========================================================= */
+
+function initializeTsunamiDisplay() {
+    showLoadingScreen();
+
+    /*
+     * JMA：
+     * 页面刷新后恢复当前警报区域、到达时间和高度。
+     */
+    startJmaTsunamiPolling();
+
+    /*
+     * P2P：
+     * 接收实时 code=552。
+     */
+    startTsunamiWebSocket();
+}
+
+Promise.all([
+    document.fonts.load(
+        "1em UDShinGoM"
+    ),
+    document.fonts.load(
+        "1em UDShinGoDB"
+    ),
+    document.fonts.load(
+        "1em UDShinGoR"
+    )
+])
+.then(() => {
+    initializeTsunamiDisplay();
+})
+.catch(error => {
+    console.error(
+        "字体加载失败：",
+        error
+    );
+
+    initializeTsunamiDisplay();
+});
+</script>
+
+</body>
+</html>
