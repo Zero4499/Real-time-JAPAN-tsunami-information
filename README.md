@@ -5,7 +5,7 @@ https://github.com/user-attachments/assets/a152882a-a061-4a11-a4f2-69483d4b9680
 
 
 # リアルタイム津波情報
-【BETA 2026/07/29】現在の津波情報発表状況の取得を妨げる重大な不具合を発見しました。当該機能の追加を試みましたが、正しく動作するかどうかは現時点では不明です。
+【BETA 2026/07/29】現在の津波情報発表状況の取得を妨げる重大な不具合を発見しました。当該機能の追加を試みましたが、正しく動作するかどうかは現時点では不明です。https://raw.githubusercontent.com/Zero4499/Real-time-JAPAN-tsunami-information/refs/heads/main/RTJTI_260729_beta.html
 
 【2026/07/07】著作権侵害のリスクを避けるため、フォントをUDShinGoProからNoto Sans JPに変更しました。
 
